@@ -52,8 +52,29 @@ FFMPEG_COMMAND = [FFMPEG_BINARY,
                   '-c:v', 'h264_nvenc',
                   '-b:v', '400k',
                   '-preset', 'slow',
-                  '-movflags', 'faststart',
+                  # Record as fragmented MP4: the file stays readable up to the last
+                  # fragment if beholder, ffmpeg or the machine dies mid-recording.
+                  '-movflags', '+frag_keyframe+empty_moov+default_base_moof',
+                  '-frag_duration', '2000000',  # microseconds
+                  # write every finished fragment to disk right away, ffmpeg otherwise
+                  # holds back ~0.5 MB (around 10 s at this bitrate) in its output buffer
+                  '-flush_packets', '1',
                   ]
+
+# After a clean stop the fragmented recording is rewritten (stream copy, no
+# re-encode) into a regular MP4 with the index at the front.
+# Usage: FFMPEG_REMUX_COMMAND + ['-i', partial_path] + FFMPEG_REMUX_OUTPUT_ARGS + [final_path]
+FFMPEG_REMUX_COMMAND = [FFMPEG_BINARY, '-y', '-hide_banner', '-loglevel', 'error', '-nostats']
+FFMPEG_REMUX_OUTPUT_ARGS = ['-c', 'copy', '-movflags', 'faststart']
+
+# Suffix of the in-progress recording, replaces '.mp4' until finalized
+PARTIAL_SUFFIX = '.partial.mp4'
+
+# seconds to wait for the encoder to finish after its input was closed
+FFMPEG_STOP_TIMEOUT = 60
+
+# write the frame metadata to disk every N frames
+META_FLUSH_INTERVAL = 30
 
 SOCKET_RECV_TIMEOUT = 1000
 WRITE_QUEUE_LENGTH = 150  # frames

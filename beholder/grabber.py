@@ -82,7 +82,7 @@ class Grabber(threading.Thread):
         if md is None:
             metadata = defaultdict(lambda: None)
         else:
-            md = np.fromstring(md, dtype=PIEYE_METADATA_DTYPE)
+            md = np.frombuffer(md, dtype=PIEYE_METADATA_DTYPE)
             metadata = dict(zip(md.dtype.names, md[0]))
             metadata['name'] = metadata['name'].decode().strip()
 
@@ -156,7 +156,7 @@ class Grabber(threading.Thread):
                             logging.warning('Write queue full! Dropping frame {}'.format(frame_idx))
 
                     # This for some reason is performance sensitive
-                    self.frame = cv2.imdecode(np.fromstring(encoded_frame, dtype='uint8'), cv2.IMREAD_UNCHANGED)
+                    self.frame = cv2.imdecode(np.frombuffer(encoded_frame, dtype='uint8'), cv2.IMREAD_UNCHANGED)
 
                     # For cameras of the bottom row we fliplr/flipud them in the sensor firmware to have the time stamp
                     # on the outside of the frame. We need to reverse that now.
