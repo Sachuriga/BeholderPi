@@ -253,7 +253,7 @@ class Beholder:
 
         # Detect if close button of was pressed.
         # May not be reliable on all platforms/GUI backends
-        if cv2.getWindowProperty('Beholder', cv2.WND_PROP_AUTOSIZE) < 1:
+        if cv2.getWindowProperty('Beholder', cv2.WND_PROP_VISIBLE) < 1:
             self.stop()
 
     def toggle_recording(self, target_state=None):
@@ -375,9 +375,9 @@ def main():
         time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(time.time())))
 
     if cli_args.debug:
-        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - {%(levelname)s} (%(threadName)-9s) %(message)s')
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - {%(levelname)s} (%(threadName)-9s) %(message)s', force=True)
     else:
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - {%(levelname)s} (%(threadName)-9s) %(message)s')
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - {%(levelname)s} (%(threadName)-9s) %(message)s', force=True)
 
     fh = logging.FileHandler(str(logfile))
     fhf = logging.Formatter('%(asctime)s : %(levelname)s : [%(threadName)-9s] {%(levelname)-8s} - %(message)s')
