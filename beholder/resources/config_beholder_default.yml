@@ -27,3 +27,10 @@ frame_crop_y: 91
 
 scale_floor: 4.28  # mm/px
 scale_arena: 3.30  # mm/px
+
+# Video encoder for recording
+#   auto:  nvenc if the custom `ffmpeg_gpu` is installed, else x264
+#   nvenc: NVIDIA GPU decode + encode (needs `ffmpeg_gpu`, see docs/Installation_Beholder.md)
+#   x264:  CPU encode with the stock ffmpeg (`sudo apt install ffmpeg`)
+encoder: auto
+# ffmpeg_binary: /path/to/ffmpeg  # optional, overrides the executable of the encoder

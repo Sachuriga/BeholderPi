@@ -1,5 +1,6 @@
 import csv
 import logging
+import shutil
 import subprocess as sp
 import threading
 from queue import Empty
@@ -7,7 +8,42 @@ from queue import Empty
 from beholder.defaults import *
 
 
-def finalize_recording(pipe, partial_path, final_path):
+def build_ffmpeg_commands(cfg):
+    """Select the encoder and assemble the ffmpeg commands for recording and finalizing.
+
+    Uses the optional configuration keys `encoder` ('auto', or a key of ENCODERS) and
+    `ffmpeg_binary` (name or path of the ffmpeg executable, overriding the encoder's default).
+
+    Returns (encoder name, recording command, remux command). The output path is appended to the
+    recording command, see `finalize_recording` for how the remux command is used.
+    """
+    choice = cfg.get('encoder', 'auto') or 'auto'
+    binary_override = cfg.get('ffmpeg_binary')
+
+    if choice == 'auto':
+        for name in ENCODER_AUTO_ORDER:
+            if shutil.which(binary_override or ENCODERS[name]['binary']):
+                break
+        else:
+            name = ENCODER_AUTO_ORDER[-1]
+    elif choice in ENCODERS:
+        name = choice
+    else:
+        raise ValueError("Unknown encoder '{}', expected 'auto' or one of {}".format(choice, list(ENCODERS)))
+
+    encoder = ENCODERS[name]
+    binary = binary_override or encoder['binary']
+    if not shutil.which(binary):
+        logging.error(f"FFMPEG executable '{binary}' for encoder '{name}' not found, recording will fail!")
+
+    fps = '{:g}'.format(float(cfg.get('frame_fps', 30.)))
+    record_cmd = ([binary] + FFMPEG_GLOBAL_ARGS + encoder['input'] + ['-r', fps, '-i', '-']
+                  + encoder['output'] + FFMPEG_RECORD_CONTAINER_ARGS)
+    remux_cmd = [binary] + FFMPEG_GLOBAL_ARGS
+    return name, record_cmd, remux_cmd
+
+
+def finalize_recording(pipe, partial_path, final_path, remux_cmd):
     """Wait for the encoder to finish, then rewrite the fragmented recording into a regular MP4.
 
     Runs in its own thread so a Writer is not blocked while its file is being finalized.
@@ -27,7 +63,7 @@ def finalize_recording(pipe, partial_path, final_path):
         logging.error(f'Nothing was recorded to {partial_path}')
         return
 
-    cmd = FFMPEG_REMUX_COMMAND + ['-i', str(partial_path)] + FFMPEG_REMUX_OUTPUT_ARGS + [str(final_path)]
+    cmd = remux_cmd + ['-i', str(partial_path)] + FFMPEG_REMUX_OUTPUT_ARGS + [str(final_path)]
     logging.debug(' '.join(cmd))
     try:
         result = sp.run(cmd, stdin=sp.DEVNULL, stdout=sp.DEVNULL, stderr=sp.PIPE)
@@ -54,6 +90,13 @@ class Writer(threading.Thread):
         self.cfg = cfg
 
         self.name = 'Writer #{:02d}'.format(self.id)
+
+        # The main thread resolves the encoder once for all writers
+        if 'ffmpeg_record_cmd' in cfg:
+            self.record_cmd, self.remux_cmd = cfg['ffmpeg_record_cmd'], cfg['ffmpeg_remux_cmd']
+        else:
+            _, self.record_cmd, self.remux_cmd = build_ffmpeg_commands(cfg)
+
         self.writer_pipe = None
         self.out_path = None
         self.partial_path = None
@@ -96,7 +139,7 @@ class Writer(threading.Thread):
         retry = '_retry{}'.format(self.n_retry) if self.n_retry else ''
         self.out_path = rec_path / 'eye{:02d}_{}{}.mp4'.format(self.id + 1, rec_ts, retry)
         self.partial_path = self.out_path.with_name(self.out_path.stem + PARTIAL_SUFFIX)
-        ffmpeg_cmd = FFMPEG_COMMAND + [str(self.partial_path)]
+        ffmpeg_cmd = self.record_cmd + [str(self.partial_path)]
         logging.debug(' '.join(ffmpeg_cmd))
 
         try:
@@ -123,7 +166,7 @@ class Writer(threading.Thread):
                 # FFMPEG already died, nothing left to flush into
                 pass
             threading.Thread(target=finalize_recording,
-                             args=(self.writer_pipe, self.partial_path, self.out_path),
+                             args=(self.writer_pipe, self.partial_path, self.out_path, self.remux_cmd),
                              name='Finalize #{:02d}'.format(self.id)).start()
             self.writer_pipe = None
 

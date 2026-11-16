@@ -22,7 +22,7 @@ import zmq
 from beholder.defaults import *
 from beholder.grabber import Grabber
 from beholder.util import buf_to_numpy, fmt_time, euclidean_distance
-from beholder.writer import Writer
+from beholder.writer import Writer, build_ffmpeg_commands
 
 SHARED_ARR = None
 FONT = cv2.FONT_HERSHEY_PLAIN
@@ -58,6 +58,10 @@ class Beholder:
 
         self.cfg = cfg
         self.sources = self.cfg['sources']
+
+        # Encoder used by all writers
+        encoder, cfg['ffmpeg_record_cmd'], cfg['ffmpeg_remux_cmd'] = build_ffmpeg_commands(cfg)
+        logging.info("Recording with encoder '{}' ({})".format(encoder, cfg['ffmpeg_record_cmd'][0]))
 
         self.n_rows = min(self.cfg['n_rows'], len(self.sources))
         self.n_cols = math.ceil(len(self.cfg['sources']) / self.n_rows)

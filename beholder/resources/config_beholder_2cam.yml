@@ -1,0 +1,32 @@
+# Two camera setup (eye01 + eye02), shown side by side.
+# The full twelve camera setup is in config_beholder_default.yml
+#
+# Use with `beholder -c <path to this file>`, or make it the default on a machine
+# by copying it to config_beholder_local.yml
+
+# Shape of the camera feeds
+frame_width: 600
+frame_height: 800
+frame_colors: 3
+frame_fps: 30.
+
+# Display arrangement
+n_rows: 1
+
+# ZMQ frame sources
+sources: ['10.0.0.101:5555',
+          '10.0.0.102:5555',
+          ]
+
+frame_crop_x: 104
+frame_crop_y: 91
+
+scale_floor: 4.28  # mm/px
+scale_arena: 3.30  # mm/px
+
+# Video encoder for recording
+#   auto:  nvenc if the custom `ffmpeg_gpu` is installed, else x264
+#   nvenc: NVIDIA GPU decode + encode (needs `ffmpeg_gpu`, see docs/Installation_Beholder.md)
+#   x264:  CPU encode with the stock ffmpeg (`sudo apt install ffmpeg`)
+encoder: auto
+# ffmpeg_binary: /path/to/ffmpeg  # optional, overrides the executable of the encoder

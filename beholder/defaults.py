@@ -39,32 +39,35 @@ FFMPEG_BINARY = 'ffmpeg_gpu'
 #                   '-vf', 'hqdn3d'
 #                   ]
 
-FFMPEG_COMMAND = [FFMPEG_BINARY,
-                  '-y',
-                  '-hide_banner',
-                  '-loglevel', 'error',
-                  '-nostats',
-                  '-vsync', '0',
-                  '-hwaccel', 'cuvid',
-                  '-c:v', 'mjpeg_cuvid',
-                  '-r', '30.',
-                  '-i', '-',
-                  '-c:v', 'h264_nvenc',
-                  '-b:v', '400k',
-                  '-preset', 'slow',
-                  # Record as fragmented MP4: the file stays readable up to the last
-                  # fragment if beholder, ffmpeg or the machine dies mid-recording.
-                  '-movflags', '+frag_keyframe+empty_moov+default_base_moof',
-                  '-frag_duration', '2000000',  # microseconds
-                  # write every finished fragment to disk right away, ffmpeg otherwise
-                  # holds back ~0.5 MB (around 10 s at this bitrate) in its output buffer
-                  '-flush_packets', '1',
-                  ]
+# Arguments shared by all ffmpeg invocations
+FFMPEG_GLOBAL_ARGS = ['-y', '-hide_banner', '-loglevel', 'error', '-nostats']
 
-# After a clean stop the fragmented recording is rewritten (stream copy, no
-# re-encode) into a regular MP4 with the index at the front.
-# Usage: FFMPEG_REMUX_COMMAND + ['-i', partial_path] + FFMPEG_REMUX_OUTPUT_ARGS + [final_path]
-FFMPEG_REMUX_COMMAND = [FFMPEG_BINARY, '-y', '-hide_banner', '-loglevel', 'error', '-nostats']
+# Available encoders for recording. Selected with the `encoder` key of the beholder
+# configuration file. 'auto' takes the first one in ENCODER_AUTO_ORDER whose binary is installed.
+#   nvenc: decode and encode on an NVIDIA GPU, needs the custom built `ffmpeg_gpu`
+#   x264:  encode on the CPU with the stock ffmpeg of the distribution (`apt install ffmpeg`)
+ENCODERS = {
+    'nvenc': {'binary': FFMPEG_BINARY,
+              'input': ['-vsync', '0', '-hwaccel', 'cuvid', '-c:v', 'mjpeg_cuvid'],
+              'output': ['-c:v', 'h264_nvenc', '-b:v', '400k', '-preset', 'slow']},
+    'x264': {'binary': 'ffmpeg',
+             'input': ['-vsync', '0'],
+             # one ffmpeg runs per camera, keep each from grabbing all cores
+             'output': ['-c:v', 'libx264', '-b:v', '400k', '-preset', 'veryfast', '-threads', '2']},
+}
+ENCODER_AUTO_ORDER = ['nvenc', 'x264']
+
+# Record as fragmented MP4: the file stays readable up to the last fragment if beholder,
+# ffmpeg or the machine dies mid-recording.
+FFMPEG_RECORD_CONTAINER_ARGS = ['-movflags', '+frag_keyframe+empty_moov+default_base_moof',
+                                '-frag_duration', '2000000',  # microseconds
+                                # write every finished fragment to disk right away, ffmpeg otherwise
+                                # holds back ~0.5 MB (around 10 s at this bitrate) in its output buffer
+                                '-flush_packets', '1']
+
+# After a clean stop the fragmented recording is rewritten (stream copy, no re-encode) into a
+# regular MP4 with the index at the front:
+#   [binary] + FFMPEG_GLOBAL_ARGS + ['-i', partial_path] + FFMPEG_REMUX_OUTPUT_ARGS + [final_path]
 FFMPEG_REMUX_OUTPUT_ARGS = ['-c', 'copy', '-movflags', 'faststart']
 
 # Suffix of the in-progress recording, replaces '.mp4' until finalized
