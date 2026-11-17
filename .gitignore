@@ -4,6 +4,7 @@ beholder/resources/config_beholder_local.yml
 ansible/inventory-local
 ansible/vars_eyes-local.yml
 ansible/vars_spectator-local.yml
+ansible/eyes-local.txt
 
 # PyCharm
 .idea/
