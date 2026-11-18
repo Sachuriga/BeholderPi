@@ -114,6 +114,11 @@ def main(cfg):
         camera._preview_alpha = cfg['camera_preview_alpha']
         camera.framerate = cfg['camera_framerate']
         camera.exposure_mode = cfg['camera_exposure_mode']
+        # Short fixed shutter + no temporal denoise to keep moving animals sharp.
+        # .get() keeps older config files (without these keys) on the previous auto behaviour.
+        camera.shutter_speed = int(cfg.get('camera_shutter_speed', 0))
+        camera.iso = int(cfg.get('camera_iso', 0))
+        camera.video_denoise = bool(cfg.get('camera_video_denoise', True))
         camera.vflip = hostname in cfg['camera_vflip']
         camera.hflip = hostname in cfg['camera_hflip']
         camera.annotate_background = picamera.Color(cfg['camera_annotate_bg_color'])

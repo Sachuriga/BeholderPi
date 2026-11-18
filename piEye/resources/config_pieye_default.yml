@@ -4,6 +4,17 @@ camera_rotation: 90
 camera_framerate: 30.
 camera_exposure_mode: 'sports'
 camera_brightness: 38
+
+# Motion blur control
+# Shutter (exposure) time in microseconds, 0 = automatic. On auto the camera exposes for up to a
+# full frame period (33 ms at 30 fps) in dim light, which smears anything that moves.
+# 5000 (1/200 s) freezes a running animal; go lower (2000-3000) if it is still blurry and
+# higher (8000-10000) if the image gets too dark/noisy. Gain is raised automatically to compensate.
+camera_shutter_speed: 5000
+# ISO: 0 = automatic gain, or fix it to 100..800
+camera_iso: 0
+# Temporal video denoising blends consecutive frames and leaves ghost trails on moving objects.
+camera_video_denoise: false
 camera_awb_mode: 'off'
 camera_awb_gains: [[159, 128], [599, 256]]
 
