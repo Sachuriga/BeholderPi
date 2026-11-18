@@ -25,4 +25,8 @@ done
 # Not found in the usual places: use whatever `python` is active (run `conda activate beholder` first).
 [[ -n "$PY" ]] || PY="python"
 
+# main.py imports `beholder.*`. Put this checkout first on the module path so that works without `pip install -e .`
+# and can never pick up another checkout's copy.
+export PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}"
+
 exec "$PY" "$REPO/beholder/main.py" "$@"
