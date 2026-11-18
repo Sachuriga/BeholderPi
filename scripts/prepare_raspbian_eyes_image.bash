@@ -40,7 +40,8 @@ root_password_clear="correct horse battery staple"
 user_password_clear="supersecret"
 root_password_crypt="$( python3 -c "import crypt; print(crypt.crypt('${root_password_clear}', crypt.mksalt(crypt.METHOD_SHA512)))" )"
 user_password_crypt="$( python3 -c "import crypt; print(crypt.crypt('${user_password_clear}', crypt.mksalt(crypt.METHOD_SHA512)))" )"
-image_url="https://downloads.raspberrypi.org/raspios_oldstable_lite_armhf_latest"
+# Pinned to the last Bullseye release: "oldstable_latest" now points to Bookworm, which has no picamera.
+image_url="https://downloads.raspberrypi.org/raspios_oldstable_lite_armhf/images/raspios_oldstable_lite_armhf-2025-05-07/2025-05-06-raspios-bullseye-armhf-lite.img.xz"
 #github_repo="https://github.com/MemDynLab/BeholderPi.git"
 overwrite_extracted_image=false
 
