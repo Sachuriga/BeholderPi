@@ -47,10 +47,22 @@ if [[ "$(nmcli -g ipv4.method con show "$CON")" == "shared" ]]; then
 else
   echo "有线口不是共享模式，跳过 (由 spectator 按主机名分配)"
 fi
+# 先改主机名并重启，让 Pi 现在就换到固定地址。
+# 否则: (1) playbook 改写 /etc/hosts 后旧主机名解析不到，sudo 卡住，ansible 超时;
+#       (2) apt 升级中途 dhcpcd 重启，Pi 换地址，ansible 连接断开。
+"${SSH[@]}" "pi@$IP" "grep -q ' $NAME\$' /etc/hosts || echo '127.0.1.1 $NAME' | sudo tee -a /etc/hosts > /dev/null; sudo hostnamectl set-hostname $NAME"
+if [[ "$IP" != "$FIXED_IP" ]]; then
+  "${SSH[@]}" "pi@$IP" 'sudo reboot' 2>/dev/null || true
+  echo "等 Pi 重启并换到 $FIXED_IP ..."
+  sleep 15
+  for i in $(seq 1 30); do
+    if "${SSH[@]}" "pi@$FIXED_IP" true 2>/dev/null; then IP="$FIXED_IP"; break; fi
+    sleep 5
+  done
+  [[ "$IP" == "$FIXED_IP" ]] || echo "没有换到 $FIXED_IP，继续用 $IP"
+fi
 
 echo "== 4/5 运行 ansible =="
-# 先把主机名改好。否则 playbook 改写 /etc/hosts 后，旧主机名解析不到，sudo 会卡十几秒，ansible 超时。
-"${SSH[@]}" "pi@$IP" "grep -q ' $NAME\$' /etc/hosts || echo '127.0.1.1 $NAME' | sudo tee -a /etc/hosts > /dev/null; sudo hostnamectl set-hostname $NAME"
 INV=$(mktemp)
 printf '[new_eyes]\n%s\n\n[new_eyes:vars]\nansible_ssh_user=pi\n' "$IP" > "$INV"
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook ansible/install_eye.yml \
@@ -58,7 +70,10 @@ ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook ansible/install_eye.yml \
   --extra-vars "@ansible/vars_eyes-local.yml" --limit new_eyes || echo "(Pi 重启换 IP 时最后一步可能报连接错误，继续验证)"
 rm -f "$INV"
 
-echo "== 5/5 等 Pi 重启后验证 =="
+echo "== 5/5 重启 Pi 并验证 =="
+# 摄像头设置 (start_x / legacy camera) 重启后才生效，playbook 不一定会触发重启。
+"${SSH[@]}" "pi@$IP" 'sudo reboot' 2>/dev/null || true
+sleep 20
 for i in $(seq 1 30); do
   if ping -c1 -W2 "$FIXED_IP" > /dev/null 2>&1; then
     sleep 10

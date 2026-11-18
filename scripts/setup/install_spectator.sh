@@ -19,14 +19,23 @@ printf 'WIFI_SSID: ""\nWIFI_PSK: ""\nWIFI_COUNTRY: "NL"\n' > ansible/vars_specta
 
 echo "== 3/5 预装 chrony 和 dnsmasq =="
 "${SSH[@]}" "pi@$IP" 'sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq chrony dnsmasq'
+# 先改主机名。否则 playbook 改写 /etc/hosts 后旧主机名解析不到，sudo 卡住，ansible 超时。
+"${SSH[@]}" "pi@$IP" "grep -q ' spectator\$' /etc/hosts || echo '127.0.1.1 spectator' | sudo tee -a /etc/hosts > /dev/null; sudo hostnamectl set-hostname spectator"
 
 echo "== 4/5 运行 ansible =="
 INV=$(mktemp)
 printf '[spectator]\n%s\n\n[spectator:vars]\nansible_ssh_user=pi\n' "$IP" > "$INV"
 ANSIBLE_HOST_KEY_CHECKING=False timeout 1800 ansible-playbook ansible/install_spectator.yml \
   --private-key "$KEY" --inventory "$INV" \
-  --extra-vars "@ansible/vars_spectator-local.yml" || echo "(最后一步 spectator 换 IP，连接断开是正常的，继续验证)"
+  --extra-vars "@ansible/vars_spectator-local.yml" && RC=0 || RC=$?
 rm -f "$INV"
+# ansible 返回码: 0 成功, 4 连接断开, 124 超时 (spectator 换 IP 后的正常现象); 其余是任务真的失败了。
+case "$RC" in
+  0) ;;
+  4|124) echo "(spectator 换 IP，连接断开是正常的，继续)" ;;
+  *) echo "ansible 有任务失败 (返回码 $RC)，安装没有完成。电脑仍是共享模式。"
+     echo "多半是下载软件包时网络出错，重新运行本脚本即可。"; exit 1 ;;
+esac
 
 echo "== 5/5 电脑有线口: 共享模式 -> 固定 10.0.0.11 =="
 echo "切换后相机网络里的 Pi 不能再上外网。"

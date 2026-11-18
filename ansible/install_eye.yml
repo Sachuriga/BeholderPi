@@ -171,6 +171,25 @@
         dest: "/etc/systemd/system/beholder_streaming.service"
         state: link
 
+    # main.py exits with "Network is unreachable" if it starts before DHCP has finished at boot.
+    - name: Beholder services | Create drop-in directory for the streaming service
+      file:
+        path: /etc/systemd/system/beholder_streaming.service.d
+        state: directory
+        mode: 0755
+
+    - name: Beholder services | Restart streaming on failure
+      copy:
+        dest: /etc/systemd/system/beholder_streaming.service.d/restart.conf
+        mode: 0644
+        content: |
+          [Unit]
+          StartLimitIntervalSec=0
+
+          [Service]
+          Restart=on-failure
+          RestartSec=5
+
     - name: Beholder services | Reload Systemd config
       systemd:
         daemon-reload: yes
