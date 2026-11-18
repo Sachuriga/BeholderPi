@@ -5,7 +5,7 @@
 A scalable array of networked Raspberry Pi cameras that stream to one recording PC.
 
 - low cost, roughly 100–200 Euro per camera node
-- 800x600 at 30 fps, visible light or IR
+- 1232x1640 at 30 fps by default (the native full-field mode of the Camera Module v2), visible light or IR
 - low-latency preview of the merged views
 - cameras synchronized to sub-millisecond resolution
 - hardware-accelerated encoding on the PC
@@ -300,17 +300,36 @@ Expected:
 - Every `date` matches the PC's.
 - `10.0.0.1` showing `^?` in `chronyc sources` is normal. The spectator does not serve time; the PC does.
 
-Start the receiver in the `beholder` conda environment. For two cameras, `eye01` and `eye02`:
+Make `beholder` a command that opens the two-camera setup. This is done once per PC:
 
 ```bash
-conda activate beholder
-python beholder/main.py -c beholder/resources/config_beholder_2cam.yml
+ln -sf config_beholder_2cam.yml beholder/resources/config_beholder_local.yml
+mkdir -p ~/.local/bin && ln -sf "$(pwd)/scripts/launchers/beholder" ~/.local/bin/beholder
 ```
+
+- The first line makes the two-camera configuration this machine's local default. The link is not tracked by git.
+- The second line installs the launcher. Open a new terminal afterwards; if `beholder` is still not found, log out and
+  in once so that `~/.local/bin` is added to the `PATH`.
+- The launcher looks for the `beholder` conda environment under `~/anaconda3`, `~/miniconda3` and `~/miniforge3`. If
+  yours is elsewhere, either run `conda activate beholder` first or set `BEHOLDER_PYTHON` to its python.
+
+From then on:
+
+```bash
+beholder
+```
+
+The launcher was tested with a stand-in program on 2026-11-18, not yet on the lab PC. The equivalent long form, which
+was used that day, is `python beholder/main.py -c beholder/resources/config_beholder_2cam.yml` inside the environment.
 
 - The `sources` list in the configuration file holds the eye addresses (`10.0.0.101:5555`, `10.0.0.102:5555`). Edit it
   if your eyes have other numbers.
 - Without `-c`, `beholder` uses `beholder/resources/config_beholder_local.yml` if it exists and otherwise the
-  twelve-camera `config_beholder_default.yml`.
+  twelve-camera `config_beholder_default.yml`. `beholder -c <file>` selects any other configuration.
+- `frame_width` and `frame_height` must equal the eyes' values. If they do not, the preview shows only a corner of the
+  picture and looks zoomed in.
+- At 1232x1640 the cropped preview is 804x1453 per camera. The window is not resizable, so on a 1080p monitor its lower
+  part is off screen. Recording is not affected.
 - Recordings go to `~/Videos/beholder` unless `-o <directory>` is given.
 
 ### What is drawn on the picture
@@ -319,8 +338,8 @@ Two different things put text on the picture, and only one of them ends up in th
 
 | Overlay | Drawn by | In the recorded video? |
 |---|---|---|
-| `eye01 2026-11-18 12:44:20.378269 0000013966` at the top of each view | The eye, burned into the frame by the camera | **Yes** |
-| A second number below it, for example `13974` | The eye's GPU: the true frame number | **Yes** |
+| `eye01 2026-11-18 12:44:20.378269 0000013966` at the top of each view | The eye, burned into the frame by the camera | **Yes**. Off in this repository's eye configuration |
+| A second number below it, for example `13974` | The eye's GPU: the true frame number | **Yes**. Off in this repository's eye configuration |
 | `Rec: 00:00:23`, the numbered dots in the corners, the red flashing border | `beholder`, on the preview window | No, preview only |
 
 How to read the eye's overlay:
@@ -335,19 +354,47 @@ How to read the eye's overlay:
 Every frame is also sent with its metadata (frame number, camera hardware timestamp, system time), independent of the
 overlay. While recording, `beholder` writes it frame by frame to a `.meta` CSV file next to each video.
 
-### Hiding the eye's overlay (optional)
+### Eye settings: resolution, bitrate, overlay
 
-This writes a local configuration on each eye with the two annotation switches off and restarts the streaming service.
-The command was handed over on 2026-11-18 but its result was not reported back, so check the picture afterwards.
+The eyes run the upstream code, whose built-in defaults are 600x800 with the overlay on. The settings this lab uses are
+in `piEye/resources/config_pieye_default.yml` of this repository, and `ansible/install_eye.yml` copies that file onto
+each eye as its local configuration (`config_pieye_local.yml`) during installation.
+
+| Setting | Value | Meaning |
+|---|---|---|
+| `frame_width`, `frame_height` | 1232, 1640 | Sensor mode 4 (1640x1232, full field of view, up to 40 fps), rotated 90°, not downscaled |
+| `camera_annotate_metadata`, `camera_annotate_frame_num` | false | No text burned into the picture; the metadata still travels with every frame |
+| `camera_recording_bitrate` | 25000000 | MJPEG bitrate in bit/s. See the note below |
+
+The same frame size is set in both `beholder` configurations, with the crop (`frame_crop_x`, `frame_crop_y`) and the
+scale (`scale_floor`, `scale_arena`) rescaled by 1232/600 from their 600x800 calibration. The scale values are
+arithmetic, not measured; recalibrate before relying on distances. `tools/stitcher/join_views.py` still has 600x800
+written into it and was not changed.
+
+To send the repository's eye configuration to eyes that are already installed, after editing it:
 
 ```bash
-for ip in 10.0.0.101 10.0.0.102; do pissh pi@$ip 'cd /home/pi/src/BeholderPi/piEye/resources && sed -e "s/^camera_annotate_metadata: true/camera_annotate_metadata: false/" -e "s/^camera_annotate_frame_num: true/camera_annotate_frame_num: false/" config_pieye_default.yml > config_pieye_local.yml && hostname && grep "^camera_annotate_metadata\|^camera_annotate_frame_num" config_pieye_local.yml && sudo systemctl restart beholder_streaming && sleep 6 && systemctl is-active beholder_streaming'; done
+for ip in 10.0.0.101 10.0.0.102; do
+  scp -i ~/.ssh/id_beholderpi -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+      piEye/resources/config_pieye_default.yml pi@$ip:/home/pi/src/BeholderPi/piEye/resources/config_pieye_local.yml \
+    && pissh pi@$ip 'sudo systemctl restart beholder_streaming && sleep 8 && hostname && systemctl is-active beholder_streaming'
+done
 ```
 
-- The local file lives on that Pi's SD card. A reflashed or newly installed eye shows the overlay again until the
-  command is repeated.
-- Restarting the service resets the frame counter; `beholder` logs `Frame source restart?` once.
-- To bring the overlay back, delete `config_pieye_local.yml` on the eye and restart `beholder_streaming`.
+Restart `beholder` afterwards. Restarting the streaming service resets the frame counter; `beholder` logs
+`Frame source restart?` once.
+
+**Bitrate.** At 1232x1640 the picture has 4.2 times the pixels of 600x800, so 25 Mbit/s leaves about 0.4 bit per pixel
+instead of 1.7, and the picture looks soft and blocky. An eye was measured sending 28 Mbit/s at this setting, which
+means the encoder is running at its limit. Raising the value to 60000000 was suggested on 2026-11-18 but the outcome
+was not reported, so the default was left at 25000000. Measure what an eye really sends with:
+
+```bash
+pissh pi@10.0.0.101 'a=$(cat /sys/class/net/eth0/statistics/tx_bytes); sleep 5; b=$(cat /sys/class/net/eth0/statistics/tx_bytes); echo "$(( (b-a)*8/5/1000000 )) Mbit/s"'
+```
+
+A Pi 3B+ has a gigabit port that carries about 300 Mbit/s in practice. Recording on the PC uses CPU encoding (x264)
+unless `ffmpeg_gpu` is installed; watch the `beholder` terminal for `Frame skip!` and `Write queue full!`.
 
 ## 8. Adding or reinstalling an eye later
 

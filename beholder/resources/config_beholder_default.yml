@@ -1,6 +1,6 @@
 # Shape of the camera feeds
-frame_width: 600
-frame_height: 800
+frame_width: 1232
+frame_height: 1640
 frame_colors: 3
 frame_fps: 30.
 
@@ -22,11 +22,13 @@ sources: ['10.0.0.101:5555',
           '10.0.0.112:5555',
           ]
 
-frame_crop_x: 104
-frame_crop_y: 91
+# Crop and scale were calibrated at 600 x 800 and rescaled by 1232/600 for the larger frame.
+# Recalibrate before relying on distance measurements.
+frame_crop_x: 214
+frame_crop_y: 187
 
-scale_floor: 4.28  # mm/px
-scale_arena: 3.30  # mm/px
+scale_floor: 2.08  # mm/px
+scale_arena: 1.61  # mm/px
 
 # Video encoder for recording
 #   auto:  nvenc if the custom `ffmpeg_gpu` is installed, else x264

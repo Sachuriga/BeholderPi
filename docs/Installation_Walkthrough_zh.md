@@ -197,15 +197,29 @@ nc -zv -w2 10.0.0.102 5555
 
 ### 5.1 启动 beholder
 
-在 `beholder` conda 环境里启动接收程序。两台相机（eye01 + eye02）：
+让 `beholder` 成为一条直接打开双相机画面的命令。每台电脑做一次：
 
 ```bash
-conda activate beholder
-python beholder/main.py -c beholder/resources/config_beholder_2cam.yml
+ln -sf config_beholder_2cam.yml beholder/resources/config_beholder_local.yml
+mkdir -p ~/.local/bin && ln -sf "$(pwd)/scripts/launchers/beholder" ~/.local/bin/beholder
 ```
 
+- 第一行把双相机配置设为这台电脑的本机默认配置。这个链接不进 git。
+- 第二行安装启动器。之后开一个新终端；如果还提示找不到 `beholder`，注销再登录一次，让 `~/.local/bin` 进入 `PATH`。
+- 启动器会在 `~/anaconda3`、`~/miniconda3`、`~/miniforge3` 下找名为 `beholder` 的 conda 环境。环境在别处的话，先 `conda activate beholder`，或设置 `BEHOLDER_PYTHON` 指向它的 python。
+
+之后只需要：
+
+```bash
+beholder
+```
+
+启动器在 2026-11-18 只用替身程序测过，还没在实验室电脑上跑过。等价的长命令（当天用的就是它）是在环境里执行 `python beholder/main.py -c beholder/resources/config_beholder_2cam.yml`。
+
 - 配置里的 `sources` 是各台 eye 的地址（`10.0.0.101:5555`、`10.0.0.102:5555`），编号不同就改这里。
-- 不加 `-c` 时优先用 `beholder/resources/config_beholder_local.yml`，没有就用十二相机的默认配置。
+- 不加 `-c` 时优先用 `beholder/resources/config_beholder_local.yml`，没有就用十二相机的默认配置。`beholder -c <文件>` 可以指定任意配置。
+- `frame_width`、`frame_height` 必须和 eye 的一致。不一致时预览只显示画面的一个角，看起来像被放大了。
+- 1232×1640 下每路裁剪后是 804×1453。窗口不能缩放，在 1080p 显示器上下半部分会超出屏幕，不影响录像。
 - 录像存到 `~/Videos/beholder`，可用 `-o <目录>` 改。
 
 ### 5.2 画面上的文字是什么
@@ -214,8 +228,8 @@ python beholder/main.py -c beholder/resources/config_beholder_2cam.yml
 
 | 文字 | 谁画的 | 会录进视频吗 |
 |---|---|---|
-| 每路画面顶部的 `eye01 2026-11-18 12:44:20.378269 0000013966` | eye，由相机烧进画面 | **会** |
-| 它下面单独的一个数，如 `13974` | eye 的 GPU，真实帧号 | **会** |
+| 每路画面顶部的 `eye01 2026-11-18 12:44:20.378269 0000013966` | eye，由相机烧进画面 | **会**。本仓库的 eye 配置里已关闭 |
+| 它下面单独的一个数，如 `13974` | eye 的 GPU，真实帧号 | **会**。本仓库的 eye 配置里已关闭 |
 | `Rec: 00:00:23`、角上带编号的圆点、红色闪烁边框 | 电脑上的 beholder，只画在预览窗口 | 不会 |
 
 怎么读 eye 的文字：
@@ -227,17 +241,37 @@ python beholder/main.py -c beholder/resources/config_beholder_2cam.yml
 
 每一帧发送时都带着元数据（帧号、相机硬件时间戳、系统时间），与画面文字无关。录像时 beholder 把它逐帧写进视频旁边同名的 `.meta` 文件（CSV）。
 
-### 5.3 去掉 eye 画面上的文字（可选）
+### 5.3 eye 的设置：分辨率、码率、画面文字
 
-在每台 eye 上写一份本机配置，把两个标注开关关掉，然后重启推流服务。这条命令是 2026-11-18 给出的，执行结果当时没有反馈，执行后请看一眼画面确认。
+eye 上跑的是上游代码，它自带的默认值是 600×800、带画面文字。本实验室用的设置写在仓库的 `piEye/resources/config_pieye_default.yml` 里，`ansible/install_eye.yml` 在安装时把这个文件复制到每台 eye 上，作为它的本机配置（`config_pieye_local.yml`）。
+
+| 设置 | 值 | 含义 |
+|---|---|---|
+| `frame_width`、`frame_height` | 1232、1640 | 传感器模式 4（1640×1232，全视野，最高 40 帧），旋转 90°，不缩小 |
+| `camera_annotate_metadata`、`camera_annotate_frame_num` | false | 画面上不烧文字；元数据仍随每一帧发送 |
+| `camera_recording_bitrate` | 25000000 | MJPEG 码率，单位 bit/s。见下面的说明 |
+
+两份 beholder 配置里用了同样的画面尺寸，裁剪值（`frame_crop_x`、`frame_crop_y`）和比例尺（`scale_floor`、`scale_arena`）按 1232/600 从 600×800 的标定值换算而来。比例尺是算出来的，不是量出来的，要依赖距离测量之前请重新标定。`tools/stitcher/join_views.py` 里还写死着 600×800，没有改。
+
+修改仓库里的 eye 配置之后，把它发给已经装好的 eye：
 
 ```bash
-for ip in 10.0.0.101 10.0.0.102; do pissh pi@$ip 'cd /home/pi/src/BeholderPi/piEye/resources && sed -e "s/^camera_annotate_metadata: true/camera_annotate_metadata: false/" -e "s/^camera_annotate_frame_num: true/camera_annotate_frame_num: false/" config_pieye_default.yml > config_pieye_local.yml && hostname && grep "^camera_annotate_metadata\|^camera_annotate_frame_num" config_pieye_local.yml && sudo systemctl restart beholder_streaming && sleep 6 && systemctl is-active beholder_streaming'; done
+for ip in 10.0.0.101 10.0.0.102; do
+  scp -i ~/.ssh/id_beholderpi -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+      piEye/resources/config_pieye_default.yml pi@$ip:/home/pi/src/BeholderPi/piEye/resources/config_pieye_local.yml \
+    && pissh pi@$ip 'sudo systemctl restart beholder_streaming && sleep 8 && hostname && systemctl is-active beholder_streaming'
+done
 ```
 
-- 本机配置存在那台 Pi 的卡上。重刷或新装的 eye 会重新带文字，要再执行一次。
-- 重启服务会让帧号归零，beholder 会打印一次 `Frame source restart?`。
-- 想恢复文字：删掉 eye 上的 `config_pieye_local.yml`，重启 `beholder_streaming`。
+之后重启 beholder。重启推流服务会让帧号归零，beholder 会打印一次 `Frame source restart?`。
+
+**码率。** 1232×1640 的像素数是 600×800 的 4.2 倍，25 Mbit/s 摊下来每像素只有约 0.4 bit（原来是 1.7），画面会发软、有方块。实测一台 eye 在这个设置下发送 28 Mbit/s，说明编码器顶着上限在跑。2026-11-18 建议过把它提到 60000000，但结果没有反馈，所以默认值仍是 25000000。测一台 eye 实际发送多少：
+
+```bash
+pissh pi@10.0.0.101 'a=$(cat /sys/class/net/eth0/statistics/tx_bytes); sleep 5; b=$(cat /sys/class/net/eth0/statistics/tx_bytes); echo "$(( (b-a)*8/5/1000000 )) Mbit/s"'
+```
+
+Pi 3B+ 的千兆口实际能跑约 300 Mbit/s。电脑上没装 `ffmpeg_gpu` 时录像用 CPU 编码（x264），注意 beholder 终端里有没有 `Frame skip!` 和 `Write queue full!`。
 
 ## 6. 以后追加或重装一台 eye
 

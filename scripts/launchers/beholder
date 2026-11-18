@@ -1,2 +1,28 @@
 #!/usr/bin/env bash
-~/anaconda3/envs/beholder/bin/python ~/src/BeholderPi/beholder/main.py "$@"
+# Start the beholder receiver/recorder. All arguments are passed on, e.g. `beholder -c <config>` or `beholder -o <dir>`.
+#
+# Without -c, beholder uses beholder/resources/config_beholder_local.yml if it exists, and otherwise the twelve
+# camera config_beholder_default.yml. To make a plain `beholder` open the two camera setup on this machine:
+#     ln -sf config_beholder_2cam.yml beholder/resources/config_beholder_local.yml
+#
+# Install by symlinking, so the launcher always belongs to this checkout:
+#     mkdir -p ~/.local/bin && ln -sf "$(pwd)/scripts/launchers/beholder" ~/.local/bin/beholder
+
+# Repository root, found from the real location of this file (works through a symlink).
+REPO="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd)"
+# A launcher that was copied (not symlinked) to ~/bin cannot find the repository that way: use the documented location.
+[[ -f "$REPO/beholder/main.py" ]] || REPO="$HOME/src/BeholderPi"
+[[ -f "$REPO/beholder/main.py" ]] || { echo "beholder: cannot find beholder/main.py (looked in $REPO)" >&2; exit 1; }
+
+# Python of the `beholder` conda environment. Set BEHOLDER_PYTHON to override.
+PY=""
+for candidate in "${BEHOLDER_PYTHON:-}" \
+                 "$HOME/anaconda3/envs/beholder/bin/python" \
+                 "$HOME/miniconda3/envs/beholder/bin/python" \
+                 "$HOME/miniforge3/envs/beholder/bin/python"; do
+  if [[ -n "$candidate" && -x "$candidate" ]]; then PY="$candidate"; break; fi
+done
+# Not found in the usual places: use whatever `python` is active (run `conda activate beholder` first).
+[[ -n "$PY" ]] || PY="python"
+
+exec "$PY" "$REPO/beholder/main.py" "$@"

@@ -13,14 +13,17 @@ camera_vflip: ['eye07', 'eye08', 'eye09', 'eye10', 'eye11', 'eye12']
 camera_hflip: ['eye07', 'eye08', 'eye09', 'eye10', 'eye11', 'eye12']
 
 # Frame resize. Note that frame dimensions must take rotation into account
-frame_width: 600
-frame_height: 800
+# Sensor mode 4 of the Camera Module v2 is 1640x1232 (full field of view, 2x2 binned, up to 40 fps).
+# With camera_rotation 90 that is 1232 wide by 1640 high, i.e. the native size without downscaling.
+# The beholder configuration must use the same two values. Previous default: 600 x 800.
+frame_width: 1232
+frame_height: 1640
 
 # Preview
 camera_preview_enable: false
 camera_preview_alpha: 200
-camera_annotate_metadata: true
-camera_annotate_frame_num: true
+camera_annotate_metadata: false
+camera_annotate_frame_num: false
 camera_annotate_text_size: 16
 camera_annotate_bg_color: 'black'
 

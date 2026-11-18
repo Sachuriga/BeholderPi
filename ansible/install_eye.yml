@@ -165,6 +165,16 @@
 
 ########################### BEHOLDER SERVICES ###########################
 
+    # The Pi runs the upstream clone, so its built-in defaults are upstream's. The settings this lab uses live in
+    # piEye/resources/config_pieye_default.yml of the repository on the PC; install them as the eye's local config.
+    - name: piEye | Install the eye configuration from this repository
+      become_user: pi
+      copy:
+        src: "{{ playbook_dir }}/../piEye/resources/config_pieye_default.yml"
+        dest: /home/pi/src/BeholderPi/piEye/resources/config_pieye_local.yml
+        mode: 0644
+      notify: Restart streaming
+
     - name: Beholder services | Create symbolic link
       file:
         src: "/home/pi/src/BeholderPi/scripts/services/streaming/beholder_streaming.service"
@@ -270,6 +280,11 @@
 ########################### HANDLERS ###########################
 
   handlers:
+    - name: Restart streaming
+      systemd:
+        name: beholder_streaming
+        state: restarted
+
     - name: Network | update hostname
       command: "hostname {{ eye_hostname }}"
 
