@@ -49,6 +49,8 @@ else
 fi
 
 echo "== 4/5 运行 ansible =="
+# 先把主机名改好。否则 playbook 改写 /etc/hosts 后，旧主机名解析不到，sudo 会卡十几秒，ansible 超时。
+"${SSH[@]}" "pi@$IP" "grep -q ' $NAME\$' /etc/hosts || echo '127.0.1.1 $NAME' | sudo tee -a /etc/hosts > /dev/null; sudo hostnamectl set-hostname $NAME"
 INV=$(mktemp)
 printf '[new_eyes]\n%s\n\n[new_eyes:vars]\nansible_ssh_user=pi\n' "$IP" > "$INV"
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook ansible/install_eye.yml \
