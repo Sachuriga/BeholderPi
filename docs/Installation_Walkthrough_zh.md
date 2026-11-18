@@ -6,7 +6,7 @@
 
 - 第 1–5 节的流程当天已在真机上跑通（eye02、spectator）。
 - `scripts/setup/` 下两个脚本和 `ansible/install_eye.yml` 在跑通之后又做了修复（见第 7 节），修复后的版本只做过语法检查，还没有完整重跑。如果脚本行为和本文不符，按第 7 节的手动办法处理。
-- 第 6 节"切回共享模式"的命令写成文档时尚未实际执行过。
+- 第 6 节当天也实际做过一次：切回共享模式后，把原来的 eye07 重刷并装成 eye01。
 
 ## 0. 概览
 
@@ -89,6 +89,8 @@ sudo sh -c 'cat /var/lib/NetworkManager/dnsmasq-*.leases'
 ```
 
 每行是 `时间 MAC IP 主机名`。新刷的卡主机名是 `raspberrypi`。注意区分已经装好的 Pi（主机名是 `eyeNN`），不要对它们运行安装脚本。
+
+这个文件里会留着还没过期的旧记录（包括切换网络之前的）。重刷过的 Pi 如果 MAC 之前登记过，会拿到和以前相同的地址，只有主机名那一列从旧名字变回 `raspberrypi`；还显示旧名字就说明新系统还没申请到地址，等一分钟再查。
 
 确认连得上、系统正确：
 
@@ -215,6 +217,8 @@ nc -zv -w2 10.0.0.102 5555
 | spectator 安装中 `Failed to fetch ... Remote end closed connection` | 镜像站临时断线 | 对切换网络回答 `N`，重跑脚本 |
 | `chronyc tracking` 显示 `Reference ID: 00000000` | 电脑的 chrony 没有 `allow`，不给别人授时 | 第 1.2 节 |
 | `Permission denied (publickey)` | 那台 Pi 是用另一把密钥装的 | 找到原密钥，或重刷重装 |
+| 租约文件里主机名还是旧的（如 `eye07`） | 那是旧记录，新系统还没申请地址 | 等一分钟重查，或直接 `pissh pi@<IP> hostname` |
+| `syntax error near unexpected token ...$'` | 把终端提示符也粘贴成了命令 | 无影响，重新粘贴命令本身 |
 | 风扇一直转 | PoE HAT 风扇按温度控制或常转，与安装进度无关 | 用 `uptime`、`ps` 看实际负载 |
 
 给已装好的 eye 手动加推流自动重试补丁：
