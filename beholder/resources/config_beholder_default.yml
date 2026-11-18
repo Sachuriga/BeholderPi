@@ -35,4 +35,9 @@ scale_arena: 1.61  # mm/px
 #   nvenc: NVIDIA GPU decode + encode (needs `ffmpeg_gpu`, see docs/Installation_Beholder.md)
 #   x264:  CPU encode with the stock ffmpeg (`sudo apt install ffmpeg`)
 encoder: auto
+
+# Video bitrate of the recording, per camera. Higher = sharper motion, larger files.
+# 3M is roughly 1.35 GB per camera and hour (about 16 GB/h for 12 cameras).
+# Still smeared when the animal runs: try 5M. Short on disk space: 2M.
+record_bitrate: 3M
 # ffmpeg_binary: /path/to/ffmpeg  # optional, overrides the executable of the encoder

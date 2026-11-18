@@ -11,8 +11,8 @@ from beholder.defaults import *
 def build_ffmpeg_commands(cfg):
     """Select the encoder and assemble the ffmpeg commands for recording and finalizing.
 
-    Uses the optional configuration keys `encoder` ('auto', or a key of ENCODERS) and
-    `ffmpeg_binary` (name or path of the ffmpeg executable, overriding the encoder's default).
+    Uses the optional configuration keys `encoder` ('auto', or a key of ENCODERS), `record_bitrate`
+    (video bitrate per camera, e.g. '3M') and `ffmpeg_binary` (name or path of the ffmpeg executable, overriding the encoder's default).
 
     Returns (encoder name, recording command, remux command). The output path is appended to the
     recording command, see `finalize_recording` for how the remux command is used.
@@ -37,8 +37,9 @@ def build_ffmpeg_commands(cfg):
         logging.error(f"FFMPEG executable '{binary}' for encoder '{name}' not found, recording will fail!")
 
     fps = '{:g}'.format(float(cfg.get('frame_fps', 30.)))
+    bitrate = str(cfg.get('record_bitrate') or RECORD_BITRATE)
     record_cmd = ([binary] + FFMPEG_GLOBAL_ARGS + encoder['input'] + ['-r', fps, '-i', '-']
-                  + encoder['output'] + FFMPEG_RECORD_CONTAINER_ARGS)
+                  + encoder['output'] + ['-b:v', bitrate] + FFMPEG_RECORD_CONTAINER_ARGS)
     remux_cmd = [binary] + FFMPEG_GLOBAL_ARGS
     return name, record_cmd, remux_cmd
 
