@@ -118,7 +118,26 @@ sudo systemctl restart chrony
 
 No script creates this file. Add it again after reinstalling the PC's operating system.
 
-### 3.3 Build the image
+### 3.3 Make sure the wired port can hold a truly static address
+
+On an Ubuntu installation that left a `/etc/netplan/50-cloud-init.yaml` behind, that file sets `dhcp4: true` for the
+wired interface. NetworkManager's own file for the connection does not mention `dhcp4`, so after the two are merged the
+port stays on DHCP *in addition to* its static address. `nmcli` then reports `auto` although `manual` was set, and the
+port only comes up while a DHCP server (the spectator) is answering.
+
+Check, and fix if it prints `dhcp4: true`:
+
+```bash
+sudo netplan get ethernets | grep dhcp4
+sudo cp /etc/netplan/50-cloud-init.yaml ~/50-cloud-init.yaml.bak
+sudo sed -i 's/dhcp4: true/dhcp4: false/' /etc/netplan/50-cloud-init.yaml
+sudo netplan generate && sudo nmcli con reload
+```
+
+The warning `Permissions for /etc/netplan/01-network-manager-all.yaml are too open` that these commands print is
+unrelated and harmless.
+
+### 3.4 Build the image
 
 ```bash
 grep ^image_url scripts/prepare_raspbian_eyes_image.bash     # must end in ...bullseye-armhf-lite.img.xz
@@ -308,6 +327,9 @@ The camera network has no internet access in normal operation, so switch it back
    ```bash
    nmcli con mod netplan-enp3s0 ipv4.method manual ipv4.addresses 10.0.0.11/24 ipv4.gateway "" ipv4.never-default yes ipv6.method disabled && nmcli con up netplan-enp3s0
    ```
+   Afterwards `nmcli -g ipv4.method con show netplan-enp3s0` must print `manual` and `ip -br addr show enp3s0` must
+   show only `10.0.0.11/24`. If it prints `auto`, or `nmcli con up` fails with `IP configuration could not be reserved`,
+   apply section 3.3.
 5. Power the spectator on, power-cycle every eye, and check as in section 7.
 
 Related cases:
@@ -333,6 +355,8 @@ Every entry below was hit during the installation on 2026-11-18.
 | The final check prints `failed` repeatedly although `PLAY RECAP` shows `failed=0` | The camera settings only apply after a reboot, and a repeated playbook run does not trigger one | The eye script now always reboots before checking. By hand: `pissh pi@<IP> 'sudo reboot'` |
 | Streaming service `failed` after boot, log shows `OSError: [Errno 101] Network is unreachable` | The service starts before DHCP has finished, the program fails to determine its own address and exits, and nothing restarts it | The playbook now installs a systemd drop-in with `Restart=on-failure`. For an eye installed earlier, use the command below this table |
 | Spectator install: `Failed to fetch ... Remote end closed connection` | A package mirror dropped the connection | Answer `N` at the network prompt and run the script again |
+| `nmcli con up` fails with `IP configuration could not be reserved`; `nmcli -g ipv4.method` prints `auto` after setting `manual`; the wired port has a second `10.0.0.x` address | `/etc/netplan/50-cloud-init.yaml` forces `dhcp4: true` on the wired interface, so the port waits for a DHCP server | Section 3.3. As a stopgap, power the spectator on and run `nmcli con up netplan-enp3s0` again |
+| An eye is missing after a restart of the network, and its line in the spectator's lease file has an older expiry than the others | That eye has not requested an address since the spectator came back: it is off, did not boot, or its cable is loose | Check its power LED, ACT LED and network LEDs, then power-cycle it |
 | `chronyc tracking` shows `Reference ID: 00000000` | The PC's chrony has no `allow` line and does not answer the Pis | Section 3.2 |
 | `Permission denied (publickey)` | That Pi was installed with a different key | Find the original key, or reflash and reinstall |
 | The lease file still shows the old hostname, for example `eye07` | That is the old entry; the new system has not requested an address yet | Wait a minute, or ask the Pi directly: `pissh pi@<IP> hostname` |
@@ -379,7 +403,7 @@ use `sudo` without a password. These are the upstream defaults and are public. T
 
 | Path | Contents |
 |---|---|
-| `scripts/prepare_raspbian_eyes_image.bash` | Builds the ansible-ready image (section 3.3) |
+| `scripts/prepare_raspbian_eyes_image.bash` | Builds the ansible-ready image (section 3.4) |
 | `scripts/setup/install_eye.sh` | Installs one eye (section 5) |
 | `scripts/setup/install_spectator.sh` | Installs the spectator and switches the PC's network (section 6) |
 | `scripts/services/` | systemd units and scripts for discovery and streaming on the Pis |

@@ -51,7 +51,22 @@ sudo systemctl restart chrony
 
 这个文件不在任何脚本里，重装电脑系统后要重新加。
 
-### 1.3 生成镜像
+### 1.3 确保有线口能用真正的固定地址
+
+系统安装时留下的 `/etc/netplan/50-cloud-init.yaml` 给有线网卡写了 `dhcp4: true`。NetworkManager 自己的配置文件里没有 `dhcp4` 这一项，两者合并后，有线口在固定地址之外还会继续等 DHCP：`nmcli` 明明设了 `manual`，读出来却是 `auto`，而且只有 spectator 在回答 DHCP 时有线口才起得来。
+
+检查，如果输出 `dhcp4: true` 就修掉：
+
+```bash
+sudo netplan get ethernets | grep dhcp4
+sudo cp /etc/netplan/50-cloud-init.yaml ~/50-cloud-init.yaml.bak
+sudo sed -i 's/dhcp4: true/dhcp4: false/' /etc/netplan/50-cloud-init.yaml
+sudo netplan generate && sudo nmcli con reload
+```
+
+这些命令打印的 `Permissions for /etc/netplan/01-network-manager-all.yaml are too open` 警告与此无关，可以忽略。
+
+### 1.4 生成镜像
 
 ```bash
 grep ^image_url scripts/prepare_raspbian_eyes_image.bash     # 必须是 ...bullseye-armhf-lite.img.xz
@@ -195,6 +210,7 @@ nc -zv -w2 10.0.0.102 5555
    ```bash
    nmcli con mod netplan-enp3s0 ipv4.method manual ipv4.addresses 10.0.0.11/24 ipv4.gateway "" ipv4.never-default yes ipv6.method disabled && nmcli con up netplan-enp3s0
    ```
+   之后 `nmcli -g ipv4.method con show netplan-enp3s0` 应输出 `manual`，`ip -br addr show enp3s0` 应只有 `10.0.0.11/24`。如果是 `auto`，或者 `nmcli con up` 报 `IP configuration could not be reserved`，按 1.3 节处理。
 5. spectator 上电，所有 eye 断电重启，按第 5 节验证。
 
 其他情况：
@@ -215,6 +231,8 @@ nc -zv -w2 10.0.0.102 5555
 | 装完验证一串 `failed`，但 `PLAY RECAP` 是 `failed=0` | 摄像头设置要重启才生效，而 playbook 重跑时不会触发重启 | 脚本已改为总是重启后验证。手动：`pissh pi@<IP> 'sudo reboot'` |
 | 开机后推流服务 `failed`，日志 `OSError: [Errno 101] Network is unreachable` | 服务在 DHCP 完成前启动，查本机 IP 失败后退出，且没有自动重试 | playbook 已加 systemd 补丁（`Restart=on-failure`）。手动补丁见下 |
 | spectator 安装中 `Failed to fetch ... Remote end closed connection` | 镜像站临时断线 | 对切换网络回答 `N`，重跑脚本 |
+| `nmcli con up` 报 `IP configuration could not be reserved`；设了 `manual` 读出来是 `auto`；有线口多出一个 `10.0.0.x` 地址 | `/etc/netplan/50-cloud-init.yaml` 给有线网卡强制了 `dhcp4: true`，有线口在等 DHCP 服务器 | 第 1.3 节。临时办法：给 spectator 上电后再执行 `nmcli con up netplan-enp3s0` |
+| 重启网络后少了一台 eye，它在 spectator 租约文件里的到期时间比别的早 | 那台 eye 在 spectator 回来之后没有申请过地址：没通电、没启动，或网线松了 | 看它的电源灯、ACT 灯、网口灯，然后断电重启 |
 | `chronyc tracking` 显示 `Reference ID: 00000000` | 电脑的 chrony 没有 `allow`，不给别人授时 | 第 1.2 节 |
 | `Permission denied (publickey)` | 那台 Pi 是用另一把密钥装的 | 找到原密钥，或重刷重装 |
 | 租约文件里主机名还是旧的（如 `eye07`） | 那是旧记录，新系统还没申请地址 | 等一分钟重查，或直接 `pissh pi@<IP> hostname` |
