@@ -23,7 +23,8 @@ What was verified on that day, and what was not:
 - The two scripts in `scripts/setup/` and `ansible/install_eye.yml` were fixed afterwards for the problems listed in
   section 9. The fixed versions passed a syntax check but have not been run end to end. If a script behaves differently
   from this guide, use the manual fix given in section 9.
-- Section 7 (starting `beholder`) describes the command line as defined in the code; it was not run on that day.
+- `beholder` was started with the two-camera configuration and showed both views. Recording was started from it; the
+  recorded files were not inspected.
 
 ## Contents
 
@@ -312,6 +313,42 @@ python beholder/main.py -c beholder/resources/config_beholder_2cam.yml
   twelve-camera `config_beholder_default.yml`.
 - Recordings go to `~/Videos/beholder` unless `-o <directory>` is given.
 
+### What is drawn on the picture
+
+Two different things put text on the picture, and only one of them ends up in the recorded video.
+
+| Overlay | Drawn by | In the recorded video? |
+|---|---|---|
+| `eye01 2026-11-18 12:44:20.378269 0000013966` at the top of each view | The eye, burned into the frame by the camera | **Yes** |
+| A second number below it, for example `13974` | The eye's GPU: the true frame number | **Yes** |
+| `Rec: 00:00:23`, the numbered dots in the corners, the red flashing border | `beholder`, on the preview window | No, preview only |
+
+How to read the eye's overlay:
+
+- The time is **UTC**, so it is one hour behind Dutch winter time. The clock is not wrong.
+- The frame number counts from the moment that eye's streaming service started, so it differs between eyes and
+  restarts at 0 when the service or the Pi restarts. Two eyes that started 3 minutes apart differ by about 5400.
+- The number in the text line lags the GPU's number by a few frames (8 on the day). Use the GPU's number.
+- The fractional seconds differ between eyes by up to one frame period (33 ms). The clocks are aligned to
+  microseconds, but the shutters are not triggered together.
+
+Every frame is also sent with its metadata (frame number, camera hardware timestamp, system time), independent of the
+overlay. While recording, `beholder` writes it frame by frame to a `.meta` CSV file next to each video.
+
+### Hiding the eye's overlay (optional)
+
+This writes a local configuration on each eye with the two annotation switches off and restarts the streaming service.
+The command was handed over on 2026-11-18 but its result was not reported back, so check the picture afterwards.
+
+```bash
+for ip in 10.0.0.101 10.0.0.102; do pissh pi@$ip 'cd /home/pi/src/BeholderPi/piEye/resources && sed -e "s/^camera_annotate_metadata: true/camera_annotate_metadata: false/" -e "s/^camera_annotate_frame_num: true/camera_annotate_frame_num: false/" config_pieye_default.yml > config_pieye_local.yml && hostname && grep "^camera_annotate_metadata\|^camera_annotate_frame_num" config_pieye_local.yml && sudo systemctl restart beholder_streaming && sleep 6 && systemctl is-active beholder_streaming'; done
+```
+
+- The local file lives on that Pi's SD card. A reflashed or newly installed eye shows the overlay again until the
+  command is repeated.
+- Restarting the service resets the frame counter; `beholder` logs `Frame source restart?` once.
+- To bring the overlay back, delete `config_pieye_local.yml` on the eye and restart `beholder_streaming`.
+
 ## 8. Adding or reinstalling an eye later
 
 The camera network has no internet access in normal operation, so switch it back to the installation state first.
@@ -361,6 +398,8 @@ Every entry below was hit during the installation on 2026-11-18.
 | `Permission denied (publickey)` | That Pi was installed with a different key | Find the original key, or reflash and reinstall |
 | The lease file still shows the old hostname, for example `eye07` | That is the old entry; the new system has not requested an address yet | Wait a minute, or ask the Pi directly: `pissh pi@<IP> hostname` |
 | `syntax error near unexpected token` mentioning the shell prompt | The terminal prompt was pasted along with the command | Harmless. Paste only the command |
+| The time on the picture is one hour behind | The eye writes UTC | Nothing to fix |
+| The frame numbers on two eyes differ | Each eye counts from the start of its own streaming service | Nothing to fix; frames are aligned by timestamp, not by number |
 | The Pi's fan keeps spinning | The PoE HAT fan follows the temperature or runs permanently; it says nothing about install progress | Look at the real load with `uptime` and `ps` |
 
 Adding the automatic restart to an eye that was installed before the playbook had it:

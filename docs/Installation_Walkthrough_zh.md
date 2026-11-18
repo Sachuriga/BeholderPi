@@ -195,6 +195,50 @@ nc -zv -w2 10.0.0.102 5555
 - 各台 `date` 与电脑一致。
 - `chronyc sources` 里 `10.0.0.1` 显示 `^?` 是正常的，spectator 不对外授时。
 
+### 5.1 启动 beholder
+
+在 `beholder` conda 环境里启动接收程序。两台相机（eye01 + eye02）：
+
+```bash
+conda activate beholder
+python beholder/main.py -c beholder/resources/config_beholder_2cam.yml
+```
+
+- 配置里的 `sources` 是各台 eye 的地址（`10.0.0.101:5555`、`10.0.0.102:5555`），编号不同就改这里。
+- 不加 `-c` 时优先用 `beholder/resources/config_beholder_local.yml`，没有就用十二相机的默认配置。
+- 录像存到 `~/Videos/beholder`，可用 `-o <目录>` 改。
+
+### 5.2 画面上的文字是什么
+
+画面上的文字有两个来源，只有一种会进到录下来的视频里。
+
+| 文字 | 谁画的 | 会录进视频吗 |
+|---|---|---|
+| 每路画面顶部的 `eye01 2026-11-18 12:44:20.378269 0000013966` | eye，由相机烧进画面 | **会** |
+| 它下面单独的一个数，如 `13974` | eye 的 GPU，真实帧号 | **会** |
+| `Rec: 00:00:23`、角上带编号的圆点、红色闪烁边框 | 电脑上的 beholder，只画在预览窗口 | 不会 |
+
+怎么读 eye 的文字：
+
+- 时间是 **UTC**，比荷兰冬令时晚一小时，不是时钟错了。
+- 帧号从那台 eye 的推流服务启动时开始数，所以各台不同，服务或 Pi 重启后从 0 重来。两台启动相差 3 分钟，帧号就差 5400 左右。
+- 文字行里的帧号比 GPU 写的滞后几帧（当天是 8 帧），以 GPU 的为准。
+- 两台时间的小数部分最多相差一帧（33 毫秒）。时钟对齐到微秒，但快门不是同时触发的。
+
+每一帧发送时都带着元数据（帧号、相机硬件时间戳、系统时间），与画面文字无关。录像时 beholder 把它逐帧写进视频旁边同名的 `.meta` 文件（CSV）。
+
+### 5.3 去掉 eye 画面上的文字（可选）
+
+在每台 eye 上写一份本机配置，把两个标注开关关掉，然后重启推流服务。这条命令是 2026-11-18 给出的，执行结果当时没有反馈，执行后请看一眼画面确认。
+
+```bash
+for ip in 10.0.0.101 10.0.0.102; do pissh pi@$ip 'cd /home/pi/src/BeholderPi/piEye/resources && sed -e "s/^camera_annotate_metadata: true/camera_annotate_metadata: false/" -e "s/^camera_annotate_frame_num: true/camera_annotate_frame_num: false/" config_pieye_default.yml > config_pieye_local.yml && hostname && grep "^camera_annotate_metadata\|^camera_annotate_frame_num" config_pieye_local.yml && sudo systemctl restart beholder_streaming && sleep 6 && systemctl is-active beholder_streaming'; done
+```
+
+- 本机配置存在那台 Pi 的卡上。重刷或新装的 eye 会重新带文字，要再执行一次。
+- 重启服务会让帧号归零，beholder 会打印一次 `Frame source restart?`。
+- 想恢复文字：删掉 eye 上的 `config_pieye_local.yml`，重启 `beholder_streaming`。
+
 ## 6. 以后追加或重装一台 eye
 
 相机网络平时没有外网，要临时切回安装状态：
@@ -237,6 +281,8 @@ nc -zv -w2 10.0.0.102 5555
 | `Permission denied (publickey)` | 那台 Pi 是用另一把密钥装的 | 找到原密钥，或重刷重装 |
 | 租约文件里主机名还是旧的（如 `eye07`） | 那是旧记录，新系统还没申请地址 | 等一分钟重查，或直接 `pissh pi@<IP> hostname` |
 | `syntax error near unexpected token ...$'` | 把终端提示符也粘贴成了命令 | 无影响，重新粘贴命令本身 |
+| 画面上的时间慢一小时 | eye 写的是 UTC | 不用处理 |
+| 两台 eye 画面上的帧号不一样 | 各自从推流服务启动时开始数 | 不用处理；对齐靠时间戳，不靠帧号 |
 | 风扇一直转 | PoE HAT 风扇按温度控制或常转，与安装进度无关 | 用 `uptime`、`ps` 看实际负载 |
 
 给已装好的 eye 手动加推流自动重试补丁：
